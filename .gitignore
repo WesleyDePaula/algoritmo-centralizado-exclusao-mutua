@@ -1,3 +1,6 @@
+# IDE Settings
+.settings/
+
 # Compiled class file
 *.class
 

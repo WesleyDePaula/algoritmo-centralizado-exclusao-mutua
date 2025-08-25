@@ -1,0 +1,14 @@
+Inicia o App:
+
+-> Criar os processos iniciais - OK
+	-> Definir para cada 40 segundos, um processo novo é criado e adicionado a lista de processos da classe App (possui um Id randômico não repetível -> UUID.randomUUID()) - OK
+
+
+-> Definir a "morte" do coordenador a cada 1 minuto - OK
+	-> quando o coordenador morre, a fila de consumo dos processos também morre
+	-> Inicia o processo de eleição, o qual é aleatório - OK
+
+-> Definir para que os processos tentam consumir um recurso num intervalo de 10-25 segundos
+	-> Caso o recurso esteja liberado, consome o mesmo durante um intervalo de 5 à 15 seg. (nenhum outro processo esteja consumindo e a fila esteja livre)
+	-> Caso o recurso esteja sendo consumido por outro processo (fila com elementos), adiciona o processo à fila, de todos os processos
+
