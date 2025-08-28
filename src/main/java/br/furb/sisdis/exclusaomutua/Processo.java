@@ -27,6 +27,10 @@ public class Processo extends Thread {
 
 	private boolean recursoEmUso = false;
 
+	private StatusProcesso status = StatusProcesso.IDLE;
+
+	private ExecutorService executor;
+
 	public Processo(String processoId) {
 		super();
 		this.processoId = processoId;
@@ -34,27 +38,36 @@ public class Processo extends Thread {
 
 	@Override
 	public void run() {
-		while (!Objects.equals(this, processoCoordenador)) {
+		// Se for coordenador, executa a coordenação
+		if (this.status == StatusProcesso.COORDENADOR) {
+			iniciarCoordenacao();
+		}
+
+		// Se não for coordenador, executa o comportamento normal
+		while (!this.isInterrupted()) {
 			try {
 				Thread.sleep(RANDOM.nextLong(10000, 25001));
 			} catch (InterruptedException e) {
+				// Se foi interrompido e agora é coordenador, não sai da thread
+				if (this.status == StatusProcesso.COORDENADOR) {
+					continue;
+				}
 				Thread.currentThread().interrupt();
 				break;
 			}
-			requisitaRecurso();
-		}
 
-		log.info("# Processo {} atuando como coordenador, consumindo processos da fila", processoId);
-		while (!this.isInterrupted()) {
-			Processo processo = filaProcessosConsumo.peek();
-			if (Objects.nonNull(processo) && !recursoEmUso) {
-				log.info(LOG_SEPARATOR);
-				log.info("# Coordenador {} concede permissão para o processo {} consumir o recurso", processoId, processo.getProcessoId());
-
-				recursoEmUso = true;
-				ExecutorService executor = Executors.newSingleThreadExecutor();
-				executor.submit(processo::consumirRecurso);
+			if (status == StatusProcesso.IDLE && !Objects.equals(this, processoCoordenador)) {
+				requisitaRecurso();
 			}
+		}
+	}
+
+	private void iniciarCoordenacao() {
+		log.info("# Processo {} atuando como coordenador, consumindo processos da fila", processoId);
+		this.executor = Executors.newSingleThreadExecutor();
+
+		while (this.status == StatusProcesso.COORDENADOR && !this.isInterrupted()) {
+			processarFilaConsumo();
 
 			// Pequena pausa para evitar busy waiting
 			try {
@@ -66,42 +79,82 @@ public class Processo extends Thread {
 		}
 	}
 
+
+	private void processarFilaConsumo() {
+		Processo processo = filaProcessosConsumo.peek();
+		if (processo != null && !recursoEmUso) {
+			filaProcessosConsumo.remove(processo);
+
+			if (processo.isAlive() && !Objects.equals(processo, this)) {
+				log.info(LOG_SEPARATOR);
+				log.info("# Coordenador {} concede permissão para o processo {} consumir o recurso", processoId, processo.getProcessoId());
+
+				recursoEmUso = true;
+				processo.setStatus(StatusProcesso.CONSUMINDO_RECURSO);
+
+				executor.submit(processo::consumirRecurso);
+			}
+		}
+	}
+
 	/**
 	 * Método que simula o consumo do recurso
 	 */
 	private void consumirRecurso() {
-		log.info(LOG_SEPARATOR);
 		log.info("## Processo {} consumindo recurso...", processoId);
 		Recurso.consumir();
-		processoCoordenador.liberarRecurso(this);
-	}
 
-	private void liberarRecurso(Processo processoASerLiberado) {
-		if (this.filaProcessosConsumo.remove(processoASerLiberado)) {
-			recursoEmUso = false;
-			log.info("#### Coordenador {} liberou o recurso do processo {}", processoId, processoASerLiberado.getProcessoId());
-		} else {
-			log.warn("#### Coordenador {} não encontrou o processo {} na fila de consumo", processoId, processoASerLiberado.getProcessoId());
+		// Verifica se o coordenador ainda está ativo antes de liberar
+		if (processoCoordenador != null && processoCoordenador.getStatus() == StatusProcesso.COORDENADOR) {
+			processoCoordenador.liberarRecurso(this);
 		}
 	}
 
+	private void liberarRecurso(Processo processoASerLiberado) {
+		log.info(LOG_SEPARATOR);
+		if (this.status != StatusProcesso.COORDENADOR) {
+			return;
+		}
+
+		processoASerLiberado.setStatus(StatusProcesso.IDLE);
+		recursoEmUso = false;
+
+		log.info("#### Coordenador {} liberou o recurso do processo {}", processoId, processoASerLiberado.getProcessoId());
+	}
+
 	private void requisitaRecurso() {
+		if (Objects.equals(this, processoCoordenador)) {
+			return;
+		}
+
 		log.info(LOG_SEPARATOR);
 		log.info("# Processo {} solicitando recurso ao coordenador", processoId);
-		processoCoordenador.adicionaProcessoAFilaConsumo(this);
+
+		if (processoCoordenador != null && processoCoordenador.getStatus() == StatusProcesso.COORDENADOR) {
+			processoCoordenador.adicionaProcessoAFilaConsumo(this);
+		}
 	}
 
 	private void adicionaProcessoAFilaConsumo(Processo processo) {
+		if (this.status != StatusProcesso.COORDENADOR || Objects.equals(processo, this)) {
+			return;
+		}
+
 		if (filaProcessosConsumo.contains(processo)) {
 			log.info("## Processo {} já está na fila, requisição ignorada \n ## Processos na fila de consumo: {}", processo.getProcessoId(), filaProcessosConsumo.stream().map(Processo::getProcessoId).toList());
 			return;
 		}
 
+		processo.setStatus(StatusProcesso.AGUARDANDO_RECURSO);
 		filaProcessosConsumo.add(processo);
-		log.info("## Coordenador {} adicionou processo {} a fila de consumo \n ## Processos na fila de consumo: {}", processoId, processo.getProcessoId(), filaProcessosConsumo.stream().map(Processo::getProcessoId).toList());
+		log.info("## Coordenador {} adicionou processo {} a fila de consumo", processoId, processo.getProcessoId());
+		log.info("## Processos na fila de consumo: {}", filaProcessosConsumo.stream().map(Processo::getProcessoId).toList());
 	}
 
-	public void eliminarProcesso() {
+	public synchronized void eliminarProcesso() {
+		if (executor != null) {
+			executor.shutdownNow();
+		}
 		this.interrupt();
 		this.filaProcessosConsumo.clear();
 	}

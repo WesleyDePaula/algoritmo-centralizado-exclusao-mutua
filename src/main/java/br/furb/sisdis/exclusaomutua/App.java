@@ -80,8 +80,7 @@ public class App {
 		
 		var ultimoIndice = RANDOM.nextInt(0, processos.size());
 		coordenador = processos.get(ultimoIndice);
-
-		// Seta o coordenador para todos os outros processos
+		coordenador.setStatus(StatusProcesso.COORDENADOR);
 		processos.forEach(processo -> processo.setProcessoCoordenador(coordenador));
 
 		log.info("#### Eleito novo coordenador: {}", coordenador.getProcessoId());
