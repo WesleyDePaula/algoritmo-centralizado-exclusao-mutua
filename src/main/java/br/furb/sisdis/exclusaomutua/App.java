@@ -2,6 +2,7 @@ package br.furb.sisdis.exclusaomutua;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -11,34 +12,39 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class App {
-	
+
+	public static final String LOG_SEPARATOR = "--------------------------------------------------------------------------------------------------------";
 	private static List<Processo> processos = new LinkedList<>();
 	
 	private static Processo coordenador;
 
 	private static final Random RANDOM = new Random(); 
-	
+
+	private static int sequencialProcesso = 1;
+
 	public static void main(String[] args) {
-		log.info("--- Aplicação inicializada ---");
-		
+		log.info("### Aplicação inicializada ###");
+
+		// Cria 4 processos iniciais e define o coordenador
 		for (int i = 0; i < 4; i++) {
-			criaProcesso();
+			criaProcesso(false);
 		}
 		elegerNovoCoordenador();
-		log.info("--------------------------------------------------------------------------------------------------------");
+
+		// Inicia todos os processos
+		processos.forEach(Processo::start);
+		log.info(LOG_SEPARATOR);
 		
-		// Cria um executor de threads
-		// TODO: VERIFICAR SE A EXECUÇÃO DE THREADS PARA CRIAR PROCESSOS E ELIMINAR COORDENADORES DEVEM SER FEITAS EM SEQUENCIA, SEM UMA SOBREPOR A OUTRA
-		ScheduledExecutorService scheduledExecutor = Executors.newSingleThreadScheduledExecutor(); //Executors.newScheduledThreadPool(2); -> Prepara o pool em duas threads
-		
-		
-		Runnable criaProcessos = () -> criaProcesso();
-		Runnable eliminaCoordenadorAtual = () -> eliminarCoordenador();
-		
-		scheduledExecutor.scheduleAtFixedRate(criaProcessos, 40, 60, TimeUnit.SECONDS);
-		scheduledExecutor.scheduleAtFixedRate(eliminaCoordenadorAtual, 60, 60, TimeUnit.SECONDS);
-		
-	}
+		// Cria um executor de threads que permanece ativo
+        ScheduledExecutorService scheduledExecutor = Executors.newScheduledThreadPool(2);
+
+        Runnable criaProcessos = () -> criaProcesso(true);
+        Runnable eliminaCoordenadorAtual = App::eliminarCoordenador;
+
+        scheduledExecutor.scheduleAtFixedRate(criaProcessos, 40, 40, TimeUnit.SECONDS);
+        scheduledExecutor.scheduleAtFixedRate(eliminaCoordenadorAtual, 60, 60, TimeUnit.SECONDS);
+
+    }
 
 	/**
 	 * Define método que elimina o coordenador atual
@@ -46,21 +52,18 @@ public class App {
 	 */
 	private static void eliminarCoordenador() {
 			if (coordenador != null) {
-				log.info("--------------------------------------------------------------------------------------------------------");
+				log.info(LOG_SEPARATOR);
 				log.info("# Iniciado processo de eliminação do coordenador {}", coordenador.getProcessoId());
 				
-				//TODO: Deve remover também a lista de consumo dos processos
-				coordenador.interrupt();
+				coordenador.eliminarProcesso();
 				processos.remove(coordenador);
 				
 				log.info("## Coordenador {} eliminado com sucesso | Total de processos ativos: {}", coordenador.getProcessoId(), processos.size());
 				coordenador = null;
 			}
-		
-		
-		// TODO: Realizar a eleição aleatória
+
 		elegerNovoCoordenador();
-		log.info("--------------------------------------------------------------------------------------------------------");
+		log.info(LOG_SEPARATOR);
 	}
 
 	
@@ -75,19 +78,27 @@ public class App {
 			return;
 		}
 		
-		var ultimoIndice = RANDOM.nextInt(0, processos.size() - 1);
+		var ultimoIndice = RANDOM.nextInt(0, processos.size());
 		coordenador = processos.get(ultimoIndice);
+
+		// Seta o coordenador para todos os outros processos
+		processos.forEach(processo -> processo.setProcessoCoordenador(coordenador));
+
 		log.info("#### Eleito novo coordenador: {}", coordenador.getProcessoId());
-		
 	}
 
 	/**
 	 * Realiza a criação de processos e adiciona na lista de processos ativos
 	 */
-	private static void criaProcesso() {
-		var processo = new Processo();
-		processo.start();
+	private static void criaProcesso(boolean startProcesso) {
+		var processo = new Processo("P" + sequencialProcesso++);
 		processos.add(processo);
+		processo.setProcessoCoordenador(coordenador);
+
+		if (startProcesso) {
+			processo.start();
+		}
+		log.info(LOG_SEPARATOR);
 		log.info("# Novo Processo {} criado | Total de processos ativos: {}", processo.getProcessoId(), processos.size());
 	}
 	
