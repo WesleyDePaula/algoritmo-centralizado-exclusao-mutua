@@ -22,6 +22,14 @@ public class App {
 
 	private static int sequencialProcesso = 1;
 
+
+    /**
+     * Inicia a aplicação.
+     * Instancia 4 processos, define aleatoriamente 1 deles como coordenador
+     * Cria processo cronometrado para criar e rodar Processos a cada 40 segundos e
+     * eliminar e eleger um coordenador a cada 60s
+     * @param args
+     */
 	public static void main(String[] args) {
 		log.info("### Aplicação inicializada ###");
 
@@ -47,8 +55,7 @@ public class App {
     }
 
 	/**
-	 * Define método que elimina o coordenador atual
-	 *
+	 * Define método que elimina o coordenador atual e chama a eleição de um novo coordenador
 	 */
 	private static void eliminarCoordenador() {
 			if (coordenador != null) {
@@ -68,7 +75,8 @@ public class App {
 
 	
 	/**
-	 * Realiza a eleição aleatória de processo coordenador
+	 * Realiza a eleição aleatória de processo coordenador.
+     * Altera a referencia de todos os processos para o novo coordenador
 	 */
 	private static void elegerNovoCoordenador() {
 		log.info("### Iniciado processo de eleição de novo processo coordenador");
@@ -87,7 +95,7 @@ public class App {
 	}
 
 	/**
-	 * Realiza a criação de processos e adiciona na lista de processos ativos
+	 * Realiza a criação de processos e adiciona na lista de processos ativos e inicia o processo
 	 */
 	private static void criaProcesso(boolean startProcesso) {
 		var processo = new Processo("P" + sequencialProcesso++);

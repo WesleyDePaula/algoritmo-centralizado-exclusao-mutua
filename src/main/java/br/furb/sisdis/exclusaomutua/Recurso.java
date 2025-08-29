@@ -9,6 +9,9 @@ public class Recurso {
 
     private static final Random RANDOM = new Random();
 
+    /**
+     * Define tempo de consumo do recurso, entre 5-15 segundos
+     */
     public static void consumir() {
         log.info("### Recurso sendo consumido...");
         try {

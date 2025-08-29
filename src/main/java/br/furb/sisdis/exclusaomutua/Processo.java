@@ -38,30 +38,35 @@ public class Processo extends Thread {
 
 	@Override
 	public void run() {
-		// Se for coordenador, executa a coordenação
-		if (this.status == StatusProcesso.COORDENADOR) {
-			iniciarCoordenacao();
-		}
-
-		// Se não for coordenador, executa o comportamento normal
-		while (!this.isInterrupted()) {
+        /**
+         * While responsavel por executar rotinas referentes a processos coordenados, realizando uma pausa entre 10 - 25 segundos
+         * após a pausa, realiza uma chamada ao coordenador requisitando o uso do recurso
+         */
+		while (!this.isInterrupted() && this.status != StatusProcesso.COORDENADOR) {
 			try {
 				Thread.sleep(RANDOM.nextLong(10000, 25001));
 			} catch (InterruptedException e) {
-				// Se foi interrompido e agora é coordenador, não sai da thread
-				if (this.status == StatusProcesso.COORDENADOR) {
-					continue;
-				}
 				Thread.currentThread().interrupt();
 				break;
 			}
 
-			if (status == StatusProcesso.IDLE && !Objects.equals(this, processoCoordenador)) {
+			if (status == StatusProcesso.IDLE) {
 				requisitaRecurso();
 			}
 		}
+
+        /**
+         * Caso o processo se torne/seja coordenador, executa while responsável pela rotina do mesmo
+         */
+        if (this.status == StatusProcesso.COORDENADOR) {
+            iniciarCoordenacao();
+        }
 	}
 
+    /**
+     * Método responsavel por iniciar a rotina de um coordenador.
+     *
+     */
 	private void iniciarCoordenacao() {
 		log.info("# Processo {} atuando como coordenador, consumindo processos da fila", processoId);
 		this.executor = Executors.newSingleThreadExecutor();
@@ -79,7 +84,10 @@ public class Processo extends Thread {
 		}
 	}
 
-
+    /**
+     * chamada para processar a fila dos processos que requisitaram consumo do recurso
+     * apenas libera o recurso se não estiver em uso
+     */
 	private void processarFilaConsumo() {
 		Processo processo = filaProcessosConsumo.peek();
 		if (processo != null && !recursoEmUso) {
@@ -98,18 +106,26 @@ public class Processo extends Thread {
 	}
 
 	/**
-	 * Método que simula o consumo do recurso
+	 * Método responsável pelo consumo do recurso por parte do processo
 	 */
 	private void consumirRecurso() {
 		log.info("## Processo {} consumindo recurso...", processoId);
 		Recurso.consumir();
 
-		// Verifica se o coordenador ainda está ativo antes de liberar
+        /**
+         * Verifica se o coordenador ainda está ativo antes de liberar
+         * Processo realiza chamada ao coordenador, avisando que pode liberar
+          */
+
 		if (processoCoordenador != null && processoCoordenador.getStatus() == StatusProcesso.COORDENADOR) {
 			processoCoordenador.liberarRecurso(this);
 		}
 	}
 
+    /**
+     * Método responsável pela liberação do recurso por parte do coordenador
+     * @param processoASerLiberado
+     */
 	private void liberarRecurso(Processo processoASerLiberado) {
 		log.info(LOG_SEPARATOR);
 		if (this.status != StatusProcesso.COORDENADOR) {
@@ -122,6 +138,9 @@ public class Processo extends Thread {
 		log.info("#### Coordenador {} liberou o recurso do processo {}", processoId, processoASerLiberado.getProcessoId());
 	}
 
+    /**
+     * Metodo por parte do processo que solicita o recurso ao coordenador
+     */
 	private void requisitaRecurso() {
 		if (Objects.equals(this, processoCoordenador)) {
 			return;
@@ -135,6 +154,11 @@ public class Processo extends Thread {
 		}
 	}
 
+    /**
+     * Metodo por parte do coordenador que adiciona o processo a fila de consumo, para controle,
+     * seta o status do processo como AGUARDANDO_RECURSO
+     * @param processo
+     */
 	private void adicionaProcessoAFilaConsumo(Processo processo) {
 		if (this.status != StatusProcesso.COORDENADOR || Objects.equals(processo, this)) {
 			return;
@@ -151,6 +175,9 @@ public class Processo extends Thread {
 		log.info("## Processos na fila de consumo: {}", filaProcessosConsumo.stream().map(Processo::getProcessoId).toList());
 	}
 
+    /**
+     * Responsável por interromper coordenador e limpar a fila de processos
+     */
 	public synchronized void eliminarProcesso() {
 		if (executor != null) {
 			executor.shutdownNow();
